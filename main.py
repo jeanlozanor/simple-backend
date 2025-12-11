@@ -41,49 +41,53 @@ def search(q: str = Query(..., description="Texto de búsqueda del usuario")):
 def chat(question: str = Query(..., description="Mensaje del usuario para el asistente SimPLE")):
     """
     Endpoint conversacional:
-    - Interpreta la búsqueda con GPT (mismo interpret_query)
+    - Interpreta la búsqueda con GPT
     - Busca productos
-    - Llama a GPT otra vez para que genere una respuesta en texto,
-      explicando qué opciones hay y recomendando algunas.
-    - Devuelve texto + lista de productos.
+    - Llama a GPT otra vez para que genere una respuesta en texto
     """
-    # 1. Interpretar búsqueda y obtener productos
-    filters = interpret_query(question)
-    products = search_all_stores(filters)
+    try:
+        # 1. Interpretar búsqueda y obtener productos
+        filters = interpret_query(question)
+        products = search_all_stores(filters)
 
-    # Preparamos los productos como JSON puro para dárselos al modelo
-    products_json = [p.model_dump() for p in products]
+        # Preparamos los productos como JSON puro
+        products_json = [p.model_dump() for p in products]
 
-    # 2. Llamar a GPT-5.1 para que analice y responda
-    instructions = """
-Eres un asistente de compras para la app SimPLE.
-
+        # 2. Llamar a GPT para que analice y responda
+        instructions = """Eres un asistente de compras para la app SimPLE.
 Tu tarea:
-- Leer la consulta del usuario.
-- Leer la lista de productos devueltos por el backend (en JSON).
-- Responder en ESPAÑOL, de forma clara y breve (máx. 2–3 párrafos).
-- Menciona 2 o 3 productos recomendados con su precio aproximado y alguna diferencia importante.
-- Si hay muy pocos productos, dilo.
-- Si no hay productos, explícalo y sugiere cómo reformular la búsqueda.
+- Leer la consulta del usuario
+- Leer la lista de productos devueltos
+- Responder en ESPAÑOL, de forma clara y breve (2-3 párrafos)
+- Menciona 2 o 3 productos recomendados con precio
+- Si hay pocos/sin productos, dilo
+NO inventes productos que no estén en la lista."""
 
-NO inventes productos que no estén en la lista JSON.
-"""
+        user_message = (
+            f"Consulta: {question}\n\n"
+            f"Filtros: {filters.model_dump()}\n\n"
+            f"Productos encontrados:\n{json.dumps(products_json, ensure_ascii=False, indent=2)}"
+        )
 
-    user_content = (
-        "Consulta del usuario:\n"
-        f"{question}\n\n"
-        "Filtros interpretados (marca, categoría, rango de precios):\n"
-        f"{filters.model_dump()}\n\n"
-        "Lista de productos devueltos por el backend SimPLE (JSON):\n"
-        f"{json.dumps(products_json, ensure_ascii=False, indent=2)}"
-    )
+        resp = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[
+                {"role": "system", "content": instructions},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
 
-    resp = client.responses.create(
-        model="gpt-5.1",
-        instructions=instructions,
-        input=user_content,
-    )
-
-    answer = resp.output_text or "No pude generar una respuesta."
-
-    return ChatResponse(answer=answer, products=products)
+        answer = resp.choices[0].message.content or "No pude generar una respuesta."
+        
+        return ChatResponse(answer=answer, products=products)
+    
+    except Exception as e:
+        # Devolver un error controlado en lugar de crash
+        error_msg = f"Error en el backend: {str(e)}"
+        print(f"ERROR: {error_msg}")
+        return ChatResponse(
+            answer=f"Disculpa, hubo un error: {str(e)}",
+            products=[]
+        )
