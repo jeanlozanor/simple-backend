@@ -13,8 +13,12 @@ api_key = os.getenv("OPENAI_API_KEY")
 if not api_key:
     raise RuntimeError("No se encontró OPENAI_API_KEY en el .env")
 
-# Cliente de OpenAI (usa Responses API)
-client = OpenAI(api_key=api_key)
+# Cliente de OpenAI - inicialización simple
+try:
+    client = OpenAI(api_key=api_key)
+except Exception as e:
+    print(f"Warning: Error inicializando OpenAI client: {e}")
+    client = None
 
 SYSTEM_PROMPT = """
 Eres un asistente para una app de comparación de precios llamada SimPLE.
@@ -54,18 +58,34 @@ Respuesta:
 
 def interpret_query(user_query: str) -> SearchFilters:
     """
-    Usa gpt-5.1 para interpretar la búsqueda del usuario
+    Usa GPT-4 para interpretar la búsqueda del usuario
     y devolver filtros estructurados (marca, categoría, rango de precios).
     """
+    if not client:
+        return SearchFilters(
+            raw_query=user_query,
+            normalized_query=user_query,
+            brand=None,
+            category=None,
+            min_price=None,
+            max_price=None,
+        )
 
-    response = client.responses.create(
-        model="gpt-5.1",
-        instructions=SYSTEM_PROMPT,
-        input=f"Busqueda del usuario: {user_query}\nRecuerda: responde solo el JSON."
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4-turbo",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": f"Búsqueda del usuario: {user_query}\nRecuerda: responde solo el JSON."}
+            ],
+            temperature=0.3,
+            max_tokens=200
+        )
 
-    # Forma recomendada: response.output_text contiene todo el texto generado
-    raw_text = response.output_text or ""
+        raw_text = response.choices[0].message.content or ""
+    except Exception as e:
+        print(f"Error llamando a OpenAI: {e}")
+        raw_text = ""
 
     try:
         data = json.loads(raw_text)
