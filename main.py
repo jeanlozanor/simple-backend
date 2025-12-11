@@ -38,17 +38,17 @@ def search(q: str = Query(..., description="Texto de búsqueda del usuario")):
 
 
 @app.get("/chat", response_model=ChatResponse)
-def chat(q: str = Query(..., description="Mensaje del usuario para el asistente SimPLE")):
+def chat(question: str = Query(..., description="Mensaje del usuario para el asistente SimPLE")):
     """
     Endpoint conversacional:
-    - Interpreta la búsqueda con GPT-5.1 (mismo interpret_query)
+    - Interpreta la búsqueda con GPT (mismo interpret_query)
     - Busca productos
-    - Llama a GPT-5.1 otra vez para que genere una respuesta en texto,
+    - Llama a GPT otra vez para que genere una respuesta en texto,
       explicando qué opciones hay y recomendando algunas.
     - Devuelve texto + lista de productos.
     """
     # 1. Interpretar búsqueda y obtener productos
-    filters = interpret_query(q)
+    filters = interpret_query(question)
     products = search_all_stores(filters)
 
     # Preparamos los productos como JSON puro para dárselos al modelo
