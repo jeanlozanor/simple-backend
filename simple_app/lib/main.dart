@@ -6,7 +6,9 @@ import 'package:http/http.dart' as http;
 /// Cambia esto si tu backend está en otra IP/puerto
 // const String apiBaseUrl = 'http://10.0.2.2:8000'; // Android emulator -> host
 // En dispositivo físico en la misma red:
-const String apiBaseUrl = 'http://10.221.163.2:8000';
+// const String apiBaseUrl = 'http://10.221.163.2:8000';
+// Backend en Render:
+const String apiBaseUrl = 'https://simple-backend-fgyx.onrender.com';
 
 /// Colores de marca SimPLE
 const Color simpleBlue = Color(0xFF0077FF);

@@ -1,1 +1,1 @@
-web: bash build.sh && uvicorn main:app --host 0.0.0.0 --port $PORT
+web: bash build.sh && python -m uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
