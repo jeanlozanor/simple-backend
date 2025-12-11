@@ -1,0 +1,32 @@
+name: simple_app
+description: SimPLE - Asistente de compras
+
+environment:
+  sdk: ">=2.17.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  http: ^1.1.0
+  flutter_native_splash: ^2.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_native_splash: ^2.4.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/logo_simple.jpg
+
+flutter_native_splash:
+  color: "#FFFFFF"
+  image: assets/logo_simple.jpg
+  android: true
+  ios: false
+  android_gravity: center
+  android_12:
+    image: assets/logo_simple.jpg
+    color: "#FFFFFF"
