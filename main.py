@@ -71,7 +71,7 @@ NO inventes productos que no estén en la lista JSON.
 
     user_content = (
         "Consulta del usuario:\n"
-        f"{q}\n\n"
+        f"{question}\n\n"
         "Filtros interpretados (marca, categoría, rango de precios):\n"
         f"{filters.model_dump()}\n\n"
         "Lista de productos devueltos por el backend SimPLE (JSON):\n"
