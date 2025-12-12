@@ -24,6 +24,16 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root():
+    return {"status": "ok", "service": "simple-backend"}
+
+
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+
 @app.get("/search", response_model=List[Product])
 def search(q: str = Query(..., description="Texto de búsqueda del usuario")):
     """
@@ -49,6 +59,15 @@ def chat(question: str = Query(..., description="Mensaje del usuario para el asi
         # 1. Interpretar búsqueda y obtener productos
         filters = interpret_query(question)
         products = search_all_stores(filters)
+
+        if client is None:
+            return ChatResponse(
+                answer=(
+                    "IA deshabilitada (falta OPENAI_API_KEY). "
+                    "Te muestro resultados de tiendas disponibles."
+                ),
+                products=products,
+            )
 
         # Preparamos los productos como JSON puro
         products_json = [p.model_dump() for p in products]
