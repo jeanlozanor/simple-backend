@@ -1,3 +1,4 @@
+import os
 import re
 from typing import List, Optional
 
@@ -17,6 +18,9 @@ HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     )
 }
+
+# Activar Playwright solo si está disponible y si la variable lo permite (para Render evitamos fallos)
+USE_PLAYWRIGHT = os.getenv("USE_PLAYWRIGHT", "true").lower() == "true"
 
 
 # =====================================================================
@@ -107,15 +111,12 @@ def _is_probably_phone(name: str, original_query: str) -> bool:
         "smartwatch",
         "reloj",
         "cargador",
-        "cable",
         "funda",
         "case",
         "protector",
         "mica",
         "cover",
         "soporte",
-        "auricular",
-        "audifono",
         "audífono",
         "audifonos",
         "audífonos",
@@ -139,6 +140,51 @@ def _is_probably_phone(name: str, original_query: str) -> bool:
     core_words = ["celular", "smartphone", "phone"]
     if any(w in ln for w in core_words):
         return True
+
+
+def _passes_category(name: str, category: Optional[str], original_query: str) -> bool:
+    """
+    Filtro por categoría para no mezclar celulares con TV u otros.
+    - Si category es None: aceptar todo.
+    - "celular": aplicar heurística de celular.
+    - "televisor": debe contener tv/televisor/4k/fhd/uhd y no parecer celular.
+    - Para otras categorías simples, solo validar que el texto contenga la palabra.
+    """
+    if category is None:
+        return True
+
+    cat = category.lower()
+    ln = name.lower()
+
+    if cat == "celular":
+        return _is_probably_phone(name, original_query)
+
+    if cat == "televisor":
+        if any(word in ln for word in ["televisor", "smart tv", "tv", "uhd", "oled", "qled", "4k", "8k"]):
+            # descartar si parece celular
+            return not _is_probably_phone(name, original_query)
+        return False
+
+    if cat == "laptop":
+        return any(w in ln for w in ["laptop", "notebook", "thinkpad", "ideapad", "macbook", "vivobook", "inspiron", "pavilion"])
+
+    if cat == "tablet":
+        return any(w in ln for w in ["tablet", "ipad", "galaxy tab", "tab "])
+
+    if cat == "audifonos":
+        return any(w in ln for w in ["audifono", "audífono", "audifonos", "audífonos", "earbud", "earbuds", "headset", "headphone", "diadema"])
+
+    if cat == "monitor":
+        return any(w in ln for w in ["monitor", "gaming monitor", "ips", "va", "hz", "curvo", "curved"])
+
+    if cat == "reloj":
+        return any(w in ln for w in ["reloj", "smartwatch", "watch"])
+
+    if cat == "accesorio":
+        # accesorios genéricos
+        return any(w in ln for w in ["cargador", "cable", "case", "funda", "protector", "power bank", "bateria", "batería"])
+
+    return True
 
     # Palabras típicas de modelos de celular
     phone_markers = [
@@ -183,7 +229,7 @@ def _clean_url(url: str) -> str:
 # HIRAOKA
 # =====================================================================
 
-def search_hiraoka(query: str, brand_filter: Optional[str] = None) -> List[Product]:
+def search_hiraoka(query: str, brand_filter: Optional[str] = None, category: Optional[str] = None) -> List[Product]:
     """
     Busca productos en Hiraoka usando la página pública de búsqueda.
     """
@@ -218,8 +264,8 @@ def search_hiraoka(query: str, brand_filter: Optional[str] = None) -> List[Produ
         else:
             name = raw_name
 
-        # Sólo nos quedamos con cosas tipo CELULAR / SMARTPHONE
-        if not _is_probably_phone(name, query):
+        # Filtrar por categoría si aplica
+        if not _passes_category(name, category, query):
             continue
 
         price_text = price_tag.get_text(strip=True)
@@ -271,44 +317,44 @@ def search_hiraoka(query: str, brand_filter: Optional[str] = None) -> List[Produ
 # FALABELLA (Playwright)
 # =====================================================================
 
-from playwright.sync_api import sync_playwright
-
 def _fetch_falabella_html(query: str) -> str:
     """
-    Usa un navegador Chromium headless (Playwright) para cargar
-    la página de búsqueda de Falabella y devolver el HTML renderizado.
-
-    Se hace robusto frente a timeouts: si el goto demora mucho, igual
-    devolvemos el HTML que se tenga hasta ese momento.
+    Si USE_PLAYWRIGHT=true: usar Playwright siempre (necesario porque Falabella carga vía JS).
+    Si USE_PLAYWRIGHT=false: intentar requests (sin garantías).
     """
     search_url = f"https://www.falabella.com.pe/falabella-pe/search?Ntt={query}"
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page(user_agent=HEADERS["User-Agent"])
-
+    if not USE_PLAYWRIGHT:
         try:
-            # Mucho más seguro que "networkidle"
-            page.goto(
-                search_url,
-                wait_until="domcontentloaded",  # o "load"
-                timeout=60000  # 60s
-            )
+            resp = requests.get(search_url, headers=HEADERS, timeout=12)
+            resp.raise_for_status()
+            return resp.text
         except Exception as e:
-            # No rompemos el scraping por timeout, solo lo registramos
-            print(f"Advertencia: timeout o error en Falabella.goto: {e}")
+            print(f"Falabella sin Playwright error: {e}")
+            return ""
 
-        # Damos un pequeño margen para que terminen de pintar los pods
-        page.wait_for_timeout(3000)  # 3 segundos
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as e:
+        print(f"No se pudo importar Playwright: {e}")
+        return ""
 
-        html = page.content()
-        browser.close()
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(user_agent=HEADERS["User-Agent"])
+            page.goto(search_url, wait_until="domcontentloaded", timeout=40000)
+            page.wait_for_timeout(3500)
+            html = page.content()
+            browser.close()
+            return html
+    except Exception as e:
+        print(f"Error usando Playwright en Falabella: {e}")
+        return ""
 
-    return html
 
 
-
-def search_falabella(query: str, brand_filter: Optional[str] = None) -> List[Product]:
+def search_falabella(query: str, brand_filter: Optional[str] = None, category: Optional[str] = None) -> List[Product]:
     """
     Busca productos en Falabella Perú usando el HTML renderizado
     por Playwright. Estructura típica:
@@ -356,8 +402,8 @@ def search_falabella(query: str, brand_filter: Optional[str] = None) -> List[Pro
         else:
             name = (subtitle_text or brand_text).strip()
 
-        # Sólo celulares / smartphones (no fundas, parlantes, etc.)
-        if not _is_probably_phone(name, query):
+        # Filtrar por categoría si aplica
+        if not _passes_category(name, category, query):
             continue
 
         # Precio: primer span dentro del contenedor de precios
@@ -424,16 +470,15 @@ def search_all_stores(filters: SearchFilters) -> List[Product]:
 
     # Hiraoka
     try:
-        results.extend(search_hiraoka(query, brand_filter))
+        results.extend(search_hiraoka(query, brand_filter, filters.category))
     except Exception as e:
         print(f"Error buscando en Hiraoka: {e}")
 
-    # Falabella - Desactivado en Render (requiere Playwright con Chromium compilado)
-    # Mantenerlo solo en desarrollo local
-    # try:
-    #     results.extend(search_falabella(query, brand_filter))
-    # except Exception as e:
-    #     print(f"Error buscando en Falabella: {e}")
+    # Falabella (requests primero, Playwright opcional por USE_PLAYWRIGHT)
+    try:
+        results.extend(search_falabella(query, brand_filter, filters.category))
+    except Exception as e:
+        print(f"Error buscando en Falabella: {e}")
 
     # Filtrado por precio si aplica
     if filters.min_price is not None:
