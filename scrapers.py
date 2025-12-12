@@ -428,11 +428,12 @@ def search_all_stores(filters: SearchFilters) -> List[Product]:
     except Exception as e:
         print(f"Error buscando en Hiraoka: {e}")
 
-    # Falabella
-    try:
-        results.extend(search_falabella(query, brand_filter))
-    except Exception as e:
-        print(f"Error buscando en Falabella: {e}")
+    # Falabella - Desactivado en Render (requiere Playwright con Chromium compilado)
+    # Mantenerlo solo en desarrollo local
+    # try:
+    #     results.extend(search_falabella(query, brand_filter))
+    # except Exception as e:
+    #     print(f"Error buscando en Falabella: {e}")
 
     # Filtrado por precio si aplica
     if filters.min_price is not None:

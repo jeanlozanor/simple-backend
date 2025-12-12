@@ -134,7 +134,7 @@ class _ChatPageState extends State<ChatPage> {
       );
 
       final response = await http.get(uri).timeout(
-        const Duration(seconds: 30),
+        const Duration(seconds: 120),
         onTimeout: () {
           throw Exception('Timeout: El servidor tardó demasiado en responder');
         },
