@@ -1,5 +1,6 @@
 import os
 import re
+import json
 from typing import List, Optional
 
 import requests
@@ -453,6 +454,175 @@ def search_falabella(query: str, brand_filter: Optional[str] = None, category: O
 
 
 # =====================================================================
+# OECHSLE (HTML)
+# =====================================================================
+
+def search_oechsle(query: str, brand_filter: Optional[str] = None, category: Optional[str] = None) -> List[Product]:
+    base_url = "https://www.oechsle.pe/catalogsearch/result/"
+    params = {"q": query}
+
+    try:
+        resp = requests.get(base_url, params=params, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"Error cargando Oechsle: {e}")
+        return []
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    products: List[Product] = []
+    seen_urls: set[str] = set()
+
+    for card in soup.select(".product-item-info, .product-item"):
+        name_tag = card.select_one(".product-item-link")
+        price_tag = card.select_one(".price")
+        img_tag = card.select_one("img")
+        link_tag = card.select_one("a.product-item-link")
+
+        if not (name_tag and price_tag and link_tag):
+            continue
+
+        raw_name = name_tag.get_text(strip=True)
+
+        alt_text = ""
+        if img_tag and img_tag.get("alt"):
+            alt_text = img_tag["alt"].strip()
+
+        name = alt_text if alt_text and len(alt_text) > len(raw_name) else raw_name
+
+        if not _passes_category(name, category, query):
+            continue
+
+        price_text = price_tag.get_text(strip=True)
+        price = _parse_price(price_text)
+        if price <= 0:
+            continue
+
+        href = link_tag.get("href") or ""
+        if href and href.startswith("/"):
+            href = "https://www.oechsle.pe" + href
+        href_clean = _clean_url(href)
+        if not href_clean or href_clean in seen_urls:
+            continue
+        seen_urls.add(href_clean)
+
+        img_url = img_tag.get("src") if img_tag and img_tag.get("src") else None
+
+        brand = _infer_brand(name, brand_filter)
+        if brand_filter:
+            if brand is None:
+                continue
+            if brand.strip().lower() != brand_filter.strip().lower():
+                continue
+
+        products.append(
+            Product(
+                name=name,
+                brand=brand,
+                price=price,
+                currency="PEN",
+                store_name="Oechsle",
+                product_url=href_clean,
+                image_url=img_url,
+            )
+        )
+
+    return products
+
+
+# =====================================================================
+# PLAZAVEA (HTML / ld+json)
+# =====================================================================
+
+def search_plazavea(query: str, brand_filter: Optional[str] = None, category: Optional[str] = None) -> List[Product]:
+    search_url = f"https://www.plazavea.com.pe/search?q={query}"
+
+    try:
+        resp = requests.get(search_url, headers=HEADERS, timeout=15)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"Error cargando PlazaVea: {e}")
+        return []
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+
+    # Intentar parsear ld+json con ItemList
+    products: List[Product] = []
+    seen_urls: set[str] = set()
+
+    scripts = soup.find_all("script", attrs={"type": "application/ld+json"})
+    items = []
+    for sc in scripts:
+        try:
+            data = json.loads(sc.string or "")
+        except Exception:
+            continue
+
+        if isinstance(data, dict) and data.get("@type") == "ItemList" and isinstance(data.get("itemListElement"), list):
+            for el in data["itemListElement"]:
+                item = el.get("item") if isinstance(el, dict) else None
+                if not isinstance(item, dict):
+                    continue
+                name = item.get("name") or ""
+                url = item.get("url") or ""
+                image = item.get("image") or None
+                offers = item.get("offers") or {}
+                price = offers.get("price") if isinstance(offers, dict) else None
+                currency = offers.get("priceCurrency") if isinstance(offers, dict) else "PEN"
+                items.append({"name": name, "url": url, "image": image, "price": price, "currency": currency})
+
+    if not items:
+        # fallback básico: tarjetas en HTML
+        cards = soup.select("[data-pvsnid] a[href*='/p']")
+        for a in cards:
+            url = a.get("href") or ""
+            name = a.get_text(strip=True)
+            items.append({"name": name, "url": url, "image": None, "price": None, "currency": "PEN"})
+
+    for it in items:
+        name = (it.get("name") or "").strip()
+        if not name:
+            continue
+
+        if not _passes_category(name, category, query):
+            continue
+
+        price = _parse_price(str(it.get("price") or ""))
+        if price <= 0:
+            continue
+
+        href = it.get("url") or ""
+        if href and href.startswith("/"):
+            href = "https://www.plazavea.com.pe" + href
+        href_clean = _clean_url(href)
+        if not href_clean or href_clean in seen_urls:
+            continue
+        seen_urls.add(href_clean)
+
+        img_url = it.get("image")
+        brand = _infer_brand(name, brand_filter)
+        if brand_filter:
+            if brand is None:
+                continue
+            if brand.strip().lower() != brand_filter.strip().lower():
+                continue
+
+        products.append(
+            Product(
+                name=name,
+                brand=brand,
+                price=price,
+                currency=it.get("currency") or "PEN",
+                store_name="PlazaVea",
+                product_url=href_clean,
+                image_url=img_url,
+            )
+        )
+
+    return products
+
+
+# =====================================================================
 # AGREGADOR MULTI-TIENDA
 # =====================================================================
 
@@ -474,11 +644,23 @@ def search_all_stores(filters: SearchFilters) -> List[Product]:
     except Exception as e:
         print(f"Error buscando en Hiraoka: {e}")
 
-    # Falabella (requests primero, Playwright opcional por USE_PLAYWRIGHT)
+    # Falabella (Playwright opcional)
     try:
         results.extend(search_falabella(query, brand_filter, filters.category))
     except Exception as e:
         print(f"Error buscando en Falabella: {e}")
+
+    # Oechsle
+    try:
+        results.extend(search_oechsle(query, brand_filter, filters.category))
+    except Exception as e:
+        print(f"Error buscando en Oechsle: {e}")
+
+    # PlazaVea
+    try:
+        results.extend(search_plazavea(query, brand_filter, filters.category))
+    except Exception as e:
+        print(f"Error buscando en PlazaVea: {e}")
 
     # Filtrado por precio si aplica
     if filters.min_price is not None:
