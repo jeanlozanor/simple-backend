@@ -36,6 +36,9 @@ def _vtex_headers(origin: str, referer: str) -> dict:
 # Activar Playwright solo si está disponible y si la variable lo permite (para Render evitamos fallos)
 USE_PLAYWRIGHT = os.getenv("USE_PLAYWRIGHT", "true").lower() == "true"
 
+# Incluir Falabella en el agregado (por defecto OFF para evitar JS/Playwright en entornos locales)
+INCLUDE_FALABELLA = os.getenv("INCLUDE_FALABELLA", "false").lower() == "true"
+
 
 # =====================================================================
 # UTILIDADES COMUNES
@@ -908,11 +911,12 @@ def search_all_stores(filters: SearchFilters) -> List[Product]:
     except Exception as e:
         print(f"Error buscando en Hiraoka: {e}")
 
-    # Falabella (Playwright opcional)
-    try:
-        results.extend(search_falabella(query, brand_filter, filters.category))
-    except Exception as e:
-        print(f"Error buscando en Falabella: {e}")
+    # Falabella (opt-in)
+    if INCLUDE_FALABELLA:
+        try:
+            results.extend(search_falabella(query, brand_filter, filters.category))
+        except Exception as e:
+            print(f"Error buscando en Falabella: {e}")
 
     # Oechsle
     try:
