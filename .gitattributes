@@ -1,0 +1,5 @@
+# Ensure shell scripts use LF on Linux deploy targets (e.g., Render)
+*.sh text eol=lf
+
+# Procfile should also be LF
+Procfile text eol=lf
