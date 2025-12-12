@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Cambia esto si tu backend está en otra IP/puerto
 // const String apiBaseUrl = 'http://10.0.2.2:8000'; // Android emulator -> host
@@ -32,8 +34,14 @@ class SimpleApp extends StatelessWidget {
           seedColor: simpleBlue,
           primary: simpleBlue,
         ),
-        scaffoldBackgroundColor: const Color(0xFFF5F7FB),
+        scaffoldBackgroundColor: const Color(0xFFF3F6FC),
         useMaterial3: true,
+        textTheme: GoogleFonts.manropeTextTheme(),
+        appBarTheme: const AppBarTheme(
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          foregroundColor: Colors.white,
+        ),
       ),
       home: const ChatPage(),
     );
@@ -207,48 +215,93 @@ class _ChatPageState extends State<ChatPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        elevation: 4,
-        backgroundColor: simpleBlue,
-        foregroundColor: Colors.white,
         titleSpacing: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [simpleBlue, simpleBlueDark],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
+        ),
         title: Row(
           children: [
             Container(
-              margin: const EdgeInsets.only(right: 8),
-              width: 32,
-              height: 32,
+              margin: const EdgeInsets.only(left: 12, right: 10),
+              width: 34,
+              height: 34,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(10),
                 child: Image.asset(
-                  'assets/logo_simple.png',
+                  'assets/logo_simple.jpg',
                   fit: BoxFit.cover,
                 ),
               ),
             ),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'SimPLE',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SimPLE',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
                   ),
-                ),
-                Text(
-                  'Tu asistente de compras',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Color(0xFFE5ECFF),
+                  Text(
+                    'Tu asistente de compras',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.manrope(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFFE8EEFF),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.store_mall_directory_rounded, size: 16, color: Colors.white),
+                  const SizedBox(width: 6),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 190),
+                    child: Text(
+                      'Hiraoka · Falabella · Oechsle · PlazaVea',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.manrope(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+        ],
       ),
       body: SafeArea(
         child: Column(
@@ -258,11 +311,11 @@ class _ChatPageState extends State<ChatPage> {
               flex: 3,
               child: Container(
                 margin: const EdgeInsets.all(12),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: const Color(0xFFE1E6F2)),
                   boxShadow: const [
                     BoxShadow(
                       color: Color(0x140F172A),
@@ -288,7 +341,7 @@ class _ChatPageState extends State<ChatPage> {
                               margin: const EdgeInsets.symmetric(
                                   vertical: 4, horizontal: 4),
                               padding: const EdgeInsets.symmetric(
-                                  vertical: 8, horizontal: 10),
+                                  vertical: 10, horizontal: 12),
                               constraints: BoxConstraints(
                                 maxWidth:
                                     MediaQuery.of(context).size.width * 0.8,
@@ -296,30 +349,32 @@ class _ChatPageState extends State<ChatPage> {
                               decoration: BoxDecoration(
                                 color: isUser
                                     ? simpleBlue
-                                    : const Color(0xFFEEF3FF),
+                                    : const Color(0xFFF2F6FF),
                                 borderRadius: BorderRadius.only(
                                   topLeft: const Radius.circular(14),
                                   topRight: const Radius.circular(14),
                                   bottomLeft: isUser
                                       ? const Radius.circular(14)
-                                      : const Radius.circular(4),
+                                      : const Radius.circular(6),
                                   bottomRight: isUser
-                                      ? const Radius.circular(4)
+                                      ? const Radius.circular(6)
                                       : const Radius.circular(14),
                                 ),
                                 border: isUser
                                     ? null
                                     : Border.all(
-                                        color: const Color(0xFFD0DDFF),
+                                        color: const Color(0xFFCFDAF5),
                                       ),
                               ),
                               child: Text(
                                 msg.text,
-                                style: TextStyle(
-                                  color:
-                                      isUser ? Colors.white : const Color(0xFF111827),
+                                style: GoogleFonts.manrope(
+                                  color: isUser
+                                      ? Colors.white
+                                      : const Color(0xFF0F172A),
                                   fontSize: 13.5,
-                                  height: 1.3,
+                                  height: 1.35,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
                             ),
@@ -327,7 +382,7 @@ class _ChatPageState extends State<ChatPage> {
                         },
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     // Input
                     _buildInputBar(),
                   ],
@@ -359,24 +414,55 @@ class _ChatPageState extends State<ChatPage> {
                   children: [
                     Row(
                       children: [
-                        Container(
-                          width: 6,
-                          height: 18,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(999),
-                            gradient: const LinearGradient(
-                              colors: [simpleYellow, simpleBlue],
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                            ),
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 18,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  gradient: const LinearGradient(
+                                    colors: [simpleYellow, simpleBlue],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Resultados recomendados',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.manrope(
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: const Color(0xFF0F172A),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Resultados recomendados',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEEF2FF),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              'Tiendas: Hiraoka · Falabella · Oechsle · PlazaVea',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.manrope(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF1D4ED8),
+                              ),
+                            ),
                           ),
                         ),
                       ],
@@ -384,15 +470,35 @@ class _ChatPageState extends State<ChatPage> {
                     const SizedBox(height: 8),
                     Expanded(
                       child: _products.isEmpty
-                          ? const Center(
-                              child: Text(
-                                'Aquí verás los productos de Hiraoka y Falabella '
-                                'que SimPLE encuentre para tu búsqueda.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Color(0xFF6B7280),
-                                ),
+                          ? Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    width: 54,
+                                    height: 54,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: const Color(0xFFEEF2FF),
+                                      border: Border.all(color: const Color(0xFFD9E3FF)),
+                                    ),
+                                    child: const Icon(
+                                      Icons.shopping_bag_outlined,
+                                      color: Color(0xFF1D4ED8),
+                                      size: 28,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    'Aquí verás los productos de Hiraoka, Falabella, Oechsle y PlazaVea.',
+                                    textAlign: TextAlign.center,
+                                    style: GoogleFonts.manrope(
+                                      fontSize: 12,
+                                      color: const Color(0xFF6B7280),
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ],
                               ),
                             )
                           : ListView.builder(
@@ -433,7 +539,7 @@ class _ChatPageState extends State<ChatPage> {
                     'Ej: celular redmi buena batería entre 400 y 800 soles',
                 border: InputBorder.none,
               ),
-              style: const TextStyle(fontSize: 13),
+              style: GoogleFonts.manrope(fontSize: 13),
               onSubmitted: (_) => _sendMessage(),
             ),
           ),
@@ -476,86 +582,118 @@ class _ProductCard extends StatelessWidget {
 
   const _ProductCard({required this.product});
 
+  Future<void> _openProductUrl(BuildContext context) async {
+    final url = product.productUrl.trim();
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Este producto no tiene enlace.')),
+      );
+      return;
+    }
+
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enlace inválido.')),
+      );
+      return;
+    }
+
+    final ok = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No se pudo abrir el enlace.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 180,
-      margin: const EdgeInsets.only(right: 8),
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openProductUrl(context),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x110F172A),
-            blurRadius: 8,
-            offset: Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Imagen
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF3F4F6),
-                borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 180,
+          margin: const EdgeInsets.only(right: 8),
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x110F172A),
+                blurRadius: 8,
+                offset: Offset(0, 3),
               ),
-              child: product.imageUrl != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Image.network(
-                        product.imageUrl!,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) =>
-                            const Center(child: Text('Sin imagen')),
-                      ),
-                    )
-                  : const Center(
-                      child: Text(
-                        'Sin imagen',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF9CA3AF),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Imagen
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3F4F6),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: product.imageUrl != null
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            product.imageUrl!,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) =>
+                                const Center(child: Text('Sin imagen')),
+                          ),
+                        )
+                      : const Center(
+                          child: Text(
+                            'Sin imagen',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: Color(0xFF9CA3AF),
+                            ),
+                          ),
                         ),
-                      ),
-                    ),
-            ),
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                product.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                product.storeName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: Color(0xFF6B7280),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${product.currency == 'PEN' ? 'S/ ' : ''}${product.price.toStringAsFixed(2)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: simpleBlueDark,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            product.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            product.storeName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 11,
-              color: Color(0xFF6B7280),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${product.currency == 'PEN' ? 'S/ ' : ''}${product.price.toStringAsFixed(2)}',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.bold,
-              color: simpleBlueDark,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
