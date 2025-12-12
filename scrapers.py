@@ -1,6 +1,7 @@
 import os
 import re
 import json
+from urllib.parse import quote_plus
 from typing import List, Optional
 
 import requests
@@ -19,6 +20,18 @@ HEADERS = {
         "Chrome/120.0.0.0 Safari/537.36"
     )
 }
+
+
+def _vtex_headers(origin: str, referer: str) -> dict:
+    """Headers extra para endpoints VTEX que suelen bloquear bots."""
+    return {
+        **HEADERS,
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "es-PE,es;q=0.9,en;q=0.8",
+        "Origin": origin,
+        "Referer": referer,
+        "X-Requested-With": "XMLHttpRequest",
+    }
 
 # Activar Playwright solo si está disponible y si la variable lo permite (para Render evitamos fallos)
 USE_PLAYWRIGHT = os.getenv("USE_PLAYWRIGHT", "true").lower() == "true"
@@ -99,6 +112,52 @@ def _is_probably_phone(name: str, original_query: str) -> bool:
     """
     ln = name.lower()
 
+    # Señales fuertes de que SÍ es un celular
+    is_phone_signal = False
+
+    core_words = ["celular", "smartphone", "phone"]
+    if any(w in ln for w in core_words):
+        is_phone_signal = True
+
+    phone_markers = [
+        "redmi",
+        "poco",
+        "galaxy",
+        "iphone",
+        "moto ",
+        "moto g",
+        "note 11",
+        "note 12",
+        "note 13",
+        "note 14",
+        "note 15",
+        "a05",
+        "a07",
+        "a15",
+        "a16",
+        "a26",
+        "a34",
+        "a35",
+    ]
+    if any(w in ln for w in phone_markers):
+        is_phone_signal = True
+
+    # Specs típicos de ficha de celular
+    if re.search(r"\b\d+\s*gb\b", ln) and ("ram" in ln or "almacen" in ln or "almacenamiento" in ln):
+        is_phone_signal = True
+    # Tamaño en pulgadas: teléfonos suelen estar ~4" a ~8"; TVs son > 20".
+    m_inches = re.search(r"\b(\d+(?:\.\d+)?)\s*\"", ln)
+    if m_inches:
+        try:
+            inches = float(m_inches.group(1))
+            if 3.5 <= inches <= 8.2:
+                is_phone_signal = True
+        except Exception:
+            pass
+
+    if "celular" in (original_query or "").lower():
+        is_phone_signal = True
+
     # Palabras que indican que NO es un celular (accesorios, baterías, etc.)
     accessories_words = [
         "parlante",
@@ -134,13 +193,10 @@ def _is_probably_phone(name: str, original_query: str) -> bool:
         "bank 20000",
         "bank 10000",
     ]
-    if any(w in ln for w in accessories_words):
+    if any(w in ln for w in accessories_words) and not is_phone_signal:
         return False
 
-    # Palabras que claramente son de celular
-    core_words = ["celular", "smartphone", "phone"]
-    if any(w in ln for w in core_words):
-        return True
+    return is_phone_signal
 
 
 def _passes_category(name: str, category: Optional[str], original_query: str) -> bool:
@@ -187,35 +243,6 @@ def _passes_category(name: str, category: Optional[str], original_query: str) ->
 
     return True
 
-    # Palabras típicas de modelos de celular
-    phone_markers = [
-        "redmi",
-        "galaxy",
-        "iphone",
-        "moto ",
-        "moto g",
-        "note 11",
-        "note 12",
-        "note 13",
-        "note 14",
-        "note 15",
-        "a05",
-        "a07",
-        "a15",
-        "a16",
-        "a26",
-        "a34",
-        "a35",
-    ]
-    if any(w in ln for w in phone_markers):
-        return True
-
-    # Si en la query pusiste "celular" y el producto no parece accesorio
-    if "celular" in original_query.lower():
-        return True
-
-    return False
-
 
 
 def _clean_url(url: str) -> str:
@@ -224,6 +251,55 @@ def _clean_url(url: str) -> str:
     como identificador de producto (y también mostrarla más bonita).
     """
     return url.split("?", 1)[0]
+
+
+def _vtex_query_candidates(query: str, brand_filter: Optional[str] = None) -> List[str]:
+    """VTEX en algunos sitios bloquea búsquedas con espacios; probamos tokens individuales."""
+    candidates: List[str] = []
+
+    if brand_filter:
+        bf = brand_filter.strip()
+        if bf:
+            candidates.append(bf)
+
+    q = (query or "").strip()
+    if not q:
+        return candidates
+
+    # Si no hay espacios, úsalo tal cual
+    if " " not in q:
+        candidates.append(q)
+        return list(dict.fromkeys(candidates))
+
+    stop = {
+        "de",
+        "del",
+        "la",
+        "el",
+        "los",
+        "las",
+        "para",
+        "con",
+        "y",
+        "en",
+        "un",
+        "una",
+        "por",
+        "smart",
+        "tv",
+        "televisor",
+        "celular",
+        "laptop",
+        "notebook",
+    }
+    tokens = re.findall(r"[a-zA-Z0-9]+", q.lower())
+    tokens = [t for t in tokens if len(t) >= 3 and t not in stop]
+
+    # Preferir tokens largos/modelos (ej: 65v6c, redmi13, etc.)
+    tokens = sorted(dict.fromkeys(tokens), key=len, reverse=True)
+    candidates.extend(tokens[:4])
+
+    return list(dict.fromkeys(candidates))
 
 
 # =====================================================================
@@ -458,47 +534,131 @@ def search_falabella(query: str, brand_filter: Optional[str] = None, category: O
 # =====================================================================
 
 def search_oechsle(query: str, brand_filter: Optional[str] = None, category: Optional[str] = None) -> List[Product]:
-    base_url = "https://www.oechsle.pe/catalogsearch/result/"
-    params = {"q": query}
-
-    try:
-        resp = requests.get(base_url, params=params, headers=HEADERS, timeout=15)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"Error cargando Oechsle: {e}")
-        return []
-
-    soup = BeautifulSoup(resp.text, "html.parser")
+    """Busca en Oechsle. Primero intenta el API VTEX; si falla, cae a HTML."""
 
     products: List[Product] = []
     seen_urls: set[str] = set()
 
-    for card in soup.select(".product-item-info, .product-item"):
-        name_tag = card.select_one(".product-item-link")
-        price_tag = card.select_one(".price")
-        img_tag = card.select_one("img")
-        link_tag = card.select_one("a.product-item-link")
+    # 1) API VTEX (más estable que el HTML)
+    api_url = "https://www.oechsle.pe/api/catalog_system/pub/products/search/"
+    try:
+        for ft in _vtex_query_candidates(query, brand_filter):
+            qref = quote_plus(ft)
+            api_resp = requests.get(
+                api_url,
+                params={"ft": ft, "sc": 1},
+                headers=_vtex_headers(
+                    origin="https://www.oechsle.pe",
+                    referer=f"https://www.oechsle.pe/busca/?ft={qref}",
+                ),
+                timeout=15,
+            )
+            if not api_resp.ok:
+                continue
 
-        if not (name_tag and price_tag and link_tag):
+            data = api_resp.json()
+            for item in data:
+                name = (item.get("productName") or "").strip()
+                if not name:
+                    continue
+                if not _passes_category(name, category, query):
+                    continue
+
+                sellers = item.get("items", [{}])[0].get("sellers", []) if item.get("items") else []
+                price = 0.0
+                if sellers:
+                    offer = sellers[0].get("commertialOffer", {})
+                    price = float(offer.get("Price") or 0)
+
+                if price <= 0:
+                    continue
+
+                link = (item.get("link") or "").strip()
+                if not link:
+                    link_text = (item.get("linkText") or "").strip()
+                    if link_text:
+                        link = f"https://www.oechsle.pe/{link_text}/p"
+                if link and link.startswith("/"):
+                    link = "https://www.oechsle.pe" + link
+                href_clean = _clean_url(link)
+                if not href_clean or href_clean in seen_urls:
+                    continue
+                seen_urls.add(href_clean)
+
+                images = item.get("items", [{}])[0].get("images", []) if item.get("items") else []
+                img_url = images[0].get("imageUrl") if images else None
+
+                brand = _infer_brand(name, brand_filter)
+                if brand_filter:
+                    if brand is None or brand.strip().lower() != brand_filter.strip().lower():
+                        continue
+
+                products.append(
+                    Product(
+                        name=name,
+                        brand=brand,
+                        price=price,
+                        currency="PEN",
+                        store_name="Oechsle",
+                        product_url=href_clean,
+                        image_url=img_url,
+                    )
+                )
+
+            if products:
+                break
+    except Exception as e:
+        print(f"Oechsle API fallback a HTML por error: {e}")
+
+    if products:
+        return products
+
+    # 2) Fallback HTML (VTEX). Oechsle suele renderizar resultados como div.resultItem
+    search_urls = [
+        "https://www.oechsle.pe/busca/",
+        "https://www.oechsle.pe/catalogsearch/result/",
+    ]
+
+    html = ""
+    for url in search_urls:
+        try:
+            if url.endswith("/busca/"):
+                resp = requests.get(url, params={"ft": query}, headers=HEADERS, timeout=15)
+            else:
+                resp = requests.get(url, params={"q": query}, headers=HEADERS, timeout=15)
+            resp.raise_for_status()
+            html = resp.text
+            if html:
+                break
+        except Exception as e:
+            print(f"Error cargando Oechsle HTML ({url}): {e}")
+
+    if not html:
+        return []
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    for card in soup.select("div.resultItem"):
+        name = (card.get("data-product-name") or "").strip()
+        if not name:
+            name_tag = card.select_one(".resultItem__detail--name")
+            name = name_tag.get_text(strip=True) if name_tag else ""
+        if not name:
             continue
-
-        raw_name = name_tag.get_text(strip=True)
-
-        alt_text = ""
-        if img_tag and img_tag.get("alt"):
-            alt_text = img_tag["alt"].strip()
-
-        name = alt_text if alt_text and len(alt_text) > len(raw_name) else raw_name
 
         if not _passes_category(name, category, query):
             continue
 
-        price_text = price_tag.get_text(strip=True)
+        price_text = (card.get("data-product-price") or "").strip()
+        if not price_text:
+            price_tag = card.select_one(".resultItem__detail--price .price .value")
+            price_text = price_tag.get_text(strip=True) if price_tag else ""
         price = _parse_price(price_text)
         if price <= 0:
             continue
 
-        href = link_tag.get("href") or ""
+        a = card.select_one("a.resultItem__link[href]")
+        href = a.get("href") if a else ""
         if href and href.startswith("/"):
             href = "https://www.oechsle.pe" + href
         href_clean = _clean_url(href)
@@ -506,13 +666,13 @@ def search_oechsle(query: str, brand_filter: Optional[str] = None, category: Opt
             continue
         seen_urls.add(href_clean)
 
-        img_url = img_tag.get("src") if img_tag and img_tag.get("src") else None
+        img = card.select_one("img.resultItem__image")
+        img_url = img.get("src") if img and img.get("src") else None
 
-        brand = _infer_brand(name, brand_filter)
+        brand_hint = (card.get("data-product-brand") or "").strip()
+        brand = _infer_brand(name, brand_filter) or (brand_hint.title() if brand_hint else None)
         if brand_filter:
-            if brand is None:
-                continue
-            if brand.strip().lower() != brand_filter.strip().lower():
+            if brand is None or brand.strip().lower() != brand_filter.strip().lower():
                 continue
 
         products.append(
@@ -535,8 +695,87 @@ def search_oechsle(query: str, brand_filter: Optional[str] = None, category: Opt
 # =====================================================================
 
 def search_plazavea(query: str, brand_filter: Optional[str] = None, category: Optional[str] = None) -> List[Product]:
-    search_url = f"https://www.plazavea.com.pe/search?q={query}"
+    """Busca en PlazaVea. Usa API VTEX; si falla, cae a HTML/ld+json."""
 
+    products: List[Product] = []
+    seen_urls: set[str] = set()
+
+    # 1) API VTEX (estable y con precios correctos)
+    api_url = "https://www.plazavea.com.pe/api/catalog_system/pub/products/search/"
+    try:
+        for ft in _vtex_query_candidates(query, brand_filter):
+            qref = quote_plus(ft)
+            api_resp = requests.get(
+                api_url,
+                params={"ft": ft, "sc": 1},
+                headers=_vtex_headers(
+                    origin="https://www.plazavea.com.pe",
+                    referer=f"https://www.plazavea.com.pe/search?q={qref}",
+                ),
+                timeout=15,
+            )
+            if not api_resp.ok:
+                continue
+
+            data = api_resp.json()
+            for item in data:
+                name = (item.get("productName") or "").strip()
+                if not name:
+                    continue
+                if not _passes_category(name, category, query):
+                    continue
+
+                sellers = item.get("items", [{}])[0].get("sellers", []) if item.get("items") else []
+                price = 0.0
+                if sellers:
+                    offer = sellers[0].get("commertialOffer", {})
+                    price = float(offer.get("Price") or 0)
+
+                if price <= 0:
+                    continue
+
+                link = (item.get("link") or "").strip()
+                if not link:
+                    link_text = (item.get("linkText") or "").strip()
+                    if link_text:
+                        link = f"https://www.plazavea.com.pe/{link_text}/p"
+                if link and link.startswith("/"):
+                    link = "https://www.plazavea.com.pe" + link
+                href_clean = _clean_url(link)
+                if not href_clean or href_clean in seen_urls:
+                    continue
+                seen_urls.add(href_clean)
+
+                images = item.get("items", [{}])[0].get("images", []) if item.get("items") else []
+                img_url = images[0].get("imageUrl") if images else None
+
+                brand = _infer_brand(name, brand_filter)
+                if brand_filter:
+                    if brand is None or brand.strip().lower() != brand_filter.strip().lower():
+                        continue
+
+                products.append(
+                    Product(
+                        name=name,
+                        brand=brand,
+                        price=price,
+                        currency="PEN",
+                        store_name="PlazaVea",
+                        product_url=href_clean,
+                        image_url=img_url,
+                    )
+                )
+
+            if products:
+                break
+    except Exception as e:
+        print(f"PlazaVea API fallback a HTML por error: {e}")
+
+    if products:
+        return products
+
+    # 2) Fallback HTML + ld+json (PlazaVea renderiza tarjetas Showcase)
+    search_url = f"https://www.plazavea.com.pe/search?q={query}"
     try:
         resp = requests.get(search_url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
@@ -546,12 +785,38 @@ def search_plazavea(query: str, brand_filter: Optional[str] = None, category: Op
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Intentar parsear ld+json con ItemList
-    products: List[Product] = []
-    seen_urls: set[str] = set()
-
-    scripts = soup.find_all("script", attrs={"type": "application/ld+json"})
     items = []
+
+    # 2.1) Tarjetas Showcase (rápido y estable)
+    for card in soup.select("div.Showcase"):
+        name = (card.get("data-ga-name") or "").strip()
+        brand = (card.get("data-ga-brand") or "").strip()
+
+        a = card.select_one("a.Showcase__link[href]")
+        href = a.get("href") if a else ""
+
+        img = card.select_one("img")
+        img_url = img.get("src") if img and img.get("src") else None
+
+        price_text = (card.get("data-ga-price") or "").strip()
+        if not price_text:
+            sale = card.select_one(".Showcase__salePrice")
+            price_text = (sale.get("data-price") if sale else "") or ""
+
+        if name and href:
+            items.append(
+                {
+                    "name": name,
+                    "brand": brand,
+                    "url": href,
+                    "image": img_url,
+                    "price": price_text,
+                    "currency": "PEN",
+                }
+            )
+
+    # 2.2) ld+json (fallback)
+    scripts = soup.find_all("script", attrs={"type": "application/ld+json"})
     for sc in scripts:
         try:
             data = json.loads(sc.string or "")
@@ -572,7 +837,6 @@ def search_plazavea(query: str, brand_filter: Optional[str] = None, category: Op
                 items.append({"name": name, "url": url, "image": image, "price": price, "currency": currency})
 
     if not items:
-        # fallback básico: tarjetas en HTML
         cards = soup.select("[data-pvsnid] a[href*='/p']")
         for a in cards:
             url = a.get("href") or ""
@@ -600,11 +864,11 @@ def search_plazavea(query: str, brand_filter: Optional[str] = None, category: Op
         seen_urls.add(href_clean)
 
         img_url = it.get("image")
-        brand = _infer_brand(name, brand_filter)
+
+        brand_hint = (it.get("brand") or "").strip()
+        brand = _infer_brand(name, brand_filter) or (brand_hint.title() if brand_hint else None)
         if brand_filter:
-            if brand is None:
-                continue
-            if brand.strip().lower() != brand_filter.strip().lower():
+            if brand is None or brand.strip().lower() != brand_filter.strip().lower():
                 continue
 
         products.append(
