@@ -823,6 +823,13 @@ def create_store(store: StoreCreate, db: Session = Depends(get_db)):
 @app.get("/stores", response_model=List[StoreOut])
 def list_stores(db: Session = Depends(get_db)):
     stores = db.query(Store).all()
+    if not stores:
+        try:
+            inserted = _seed_default_stores(db)
+            if inserted:
+                stores = db.query(Store).all()
+        except Exception:
+            logger.exception("Seed en /stores falló")
     out: List[StoreOut] = []
     for s in stores:
         methods = s.payment_methods.split(",") if s.payment_methods else None
