@@ -38,13 +38,116 @@ app = FastAPI(
 )
 
 
+def _seed_default_stores(db: Session) -> int:
+    existing = db.query(Store).count()
+    if existing > 0:
+        return 0
+
+    stores = [
+        Store(
+            name="Hiraoka Miraflores",
+            code="hiraoka-miraflores",
+            address="Av. Larco 1234",
+            district="Miraflores",
+            city="Lima",
+            latitude=-12.1265,
+            longitude=-77.0296,
+            payment_methods="tarjeta,efectivo,yape,plin",
+        ),
+        Store(
+            name="Hiraoka San Isidro",
+            code="hiraoka-san-isidro",
+            address="Av. Paseo de la República 3456",
+            district="San Isidro",
+            city="Lima",
+            latitude=-12.0904,
+            longitude=-77.0360,
+            payment_methods="tarjeta,efectivo,yape,plin",
+        ),
+        Store(
+            name="Falabella Miraflores",
+            code="falabella-miraflores",
+            address="Av. Larco 5678",
+            district="Miraflores",
+            city="Lima",
+            latitude=-12.1275,
+            longitude=-77.0306,
+            payment_methods="tarjeta,efectivo,yape",
+        ),
+        Store(
+            name="Falabella Centro",
+            code="falabella-centro",
+            address="Jr. Carabaya 789",
+            district="Lima Cercado",
+            city="Lima",
+            latitude=-12.0459,
+            longitude=-77.0318,
+            payment_methods="tarjeta,efectivo",
+        ),
+        Store(
+            name="Alkosto Online",
+            code="alkosto-online",
+            address=None,
+            district=None,
+            city="Online",
+            latitude=-12.06,
+            longitude=-77.04,
+            payment_methods="tarjeta",
+        ),
+        Store(
+            name="Promart",
+            code="promart",
+            address=None,
+            district=None,
+            city="Online",
+            latitude=-12.06,
+            longitude=-77.04,
+            payment_methods="tarjeta,efectivo",
+        ),
+        Store(
+            name="Oechsle",
+            code="oechsle",
+            address=None,
+            district=None,
+            city="Online",
+            latitude=-12.06,
+            longitude=-77.04,
+            payment_methods="tarjeta,efectivo",
+        ),
+        Store(
+            name="PlazaVea",
+            code="plazavea",
+            address=None,
+            district=None,
+            city="Online",
+            latitude=-12.06,
+            longitude=-77.04,
+            payment_methods="tarjeta,efectivo",
+        ),
+    ]
+
+    for store in stores:
+        db.add(store)
+
+    db.commit()
+    return len(stores)
+
+
 @app.on_event("startup")
-def _startup_create_tables() -> None:
-    # Importante para Render: no bloquear el arranque si la BD no está lista.
+def _startup_init_db() -> None:
+    # En Render el servicio puede arrancar con una BD vacía.
+    # Creamos tablas y sembramos tiendas por defecto si es necesario.
     try:
         Base.metadata.create_all(bind=engine)
+        db = SessionLocal()
+        try:
+            inserted = _seed_default_stores(db)
+            if inserted:
+                logger.info("Seed de tiendas creado: %s", inserted)
+        finally:
+            db.close()
     except Exception:
-        logger.exception("DB init failed (continuando sin bloquear el arranque)")
+        logger.exception("DB init/seed failed (continuando sin bloquear el arranque)")
 
 # ========= DEPENDENCIA DE BD =========
 
