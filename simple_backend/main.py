@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from pydantic import BaseModel
 from typing import List, Optional
@@ -16,8 +18,7 @@ from sqlalchemy import or_
 from db import SessionLocal, engine, Base
 from models import Store, Product, InventoryItem
 
-# Crear tablas en la BD si no existen
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger("simple_backend")
 
 # Config para Hiraoka (búsqueda en vivo)
 HIRAOKA_BASE_URL = "https://hiraoka.com.pe/gpsearch/"
@@ -35,6 +36,15 @@ app = FastAPI(
     description="Backend de Simple: búsqueda de productos con IA + mapa",
     version="0.3.0"
 )
+
+
+@app.on_event("startup")
+def _startup_create_tables() -> None:
+    # Importante para Render: no bloquear el arranque si la BD no está lista.
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception:
+        logger.exception("DB init failed (continuando sin bloquear el arranque)")
 
 # ========= DEPENDENCIA DE BD =========
 
