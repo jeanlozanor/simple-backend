@@ -1,0 +1,12 @@
+2025-12-18 20:07:49,989 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2025-12-18 20:07:50,013 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("stores")
+2025-12-18 20:07:50,014 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-12-18 20:07:50,015 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("products")
+2025-12-18 20:07:50,017 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-12-18 20:07:50,018 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("inventory_items")
+2025-12-18 20:07:50,019 INFO sqlalchemy.engine.Engine [raw sql] ()
+2025-12-18 20:07:50,020 INFO sqlalchemy.engine.Engine COMMIT
+Error al conectar con MercadoLibre: 403 Client Error: Forbidden for url: https://api.mercadolibre.com/sites/MPE/search?q=bose&limit=25
+INFO:     127.0.0.1:59665 - "POST /search/mercadolibre-live HTTP/1.1" 200 OK
+Error al conectar con MercadoLibre: 403 Client Error: Forbidden for url: https://api.mercadolibre.com/sites/MPE/search?q=bose&limit=25
+INFO:     127.0.0.1:56757 - "POST /search/mercadolibre-live HTTP/1.1" 200 OK

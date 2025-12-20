@@ -11,16 +11,11 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "sqlite:///./simple.db")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-if DATABASE_URL.startswith("sqlite"):
-    connect_args = {"check_same_thread": False}
-else:
-    # psycopg2: evita cuelgues largos si la BD no responde.
-    connect_args = {"connect_timeout": 5}
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
 
 engine = create_engine(
     DATABASE_URL,
     connect_args=connect_args,
-    pool_pre_ping=True,
     echo=os.environ.get("SQL_ECHO", "0") == "1",
 )
 
