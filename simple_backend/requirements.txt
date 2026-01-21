@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy
+psycopg2-binary
+python-multipart
+requests
+beautifulsoup4
+sentence-transformers
+fuzzywuzzy
+python-Levenshtein
