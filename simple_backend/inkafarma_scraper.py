@@ -63,14 +63,14 @@ def scrape_inkafarma_live(
             # ========= MARCA =========
             brand = hit.get("brand", None)
 
-            # ========= FILTRO ESTRICTO POR PALABRAS =====
+            # ========= FILTRO POR PALABRAS (menos estricto, Algolia ya filtra bien) =====
             full_name = f"{name} {brand or ''}"
             norm_full_name = normalize_text(full_name)
 
-            query_tokens = [t for t in normalize_text(query).split()]
-            full_name_words = norm_full_name.split()
+            query_tokens = [t for t in normalize_text(query).split() if len(t) > 2]
 
-            if query_tokens and not all(tok in full_name_words for tok in query_tokens):
+            # Verificar que cada token esté contenido en el nombre (no como palabra exacta)
+            if query_tokens and not all(tok in norm_full_name for tok in query_tokens):
                 continue
 
             # ========= PRECIO =========
