@@ -1254,10 +1254,10 @@ def search_all_stores(payload: SearchRequest):
     Búsqueda combinada en TODAS las tiendas:
     - Hiraoka
     - Falabella
-    - Alkosto
     - Promart
     - Oechsle
     - PlazaVea
+    - Inkafarma
     
     Con corrección automática y filtrado inteligente.
     """
@@ -1271,17 +1271,6 @@ def search_all_stores(payload: SearchRequest):
     corrected_query = correct_search_query(payload.query)
     
     # 2) Buscar en todas las tiendas
-    try:
-        from alkosto_scraper import scrape_alkosto_live
-    except ImportError:
-        print("Advertencia: Alkosto scraper no disponible")
-        alkosto_results = []
-    else:
-        alkosto_results = scrape_alkosto_live(
-            query=corrected_query,
-            user_location=payload.user_location,
-            filters=payload.filters,
-        )
 
     try:
         from vtex_scraper import scrape_vtex_catalog_live
@@ -1335,14 +1324,27 @@ def search_all_stores(payload: SearchRequest):
         filters=payload.filters,
     )
 
+    # Inkafarma
+    try:
+        from inkafarma_scraper import scrape_inkafarma_live
+    except ImportError:
+        print("Advertencia: Inkafarma scraper no disponible")
+        inkafarma_results = []
+    else:
+        inkafarma_results = scrape_inkafarma_live(
+            query=corrected_query,
+            user_location=payload.user_location,
+            filters=payload.filters,
+        )
+
     # 3) Combinar resultados
     all_results = (
         hiraoka_results
         + falabella_results
-        + alkosto_results
         + promart_results
         + oechsle_results
         + plazavea_results
+        + inkafarma_results
     )
 
     # 4) Aplicar filtrado inteligente
@@ -1384,12 +1386,6 @@ def get_recommendations(payload: SearchRequest):
     # Buscar en todas las tiendas
     corrected_query = correct_search_query(payload.query)
     
-    try:
-        from alkosto_scraper import scrape_alkosto_live
-    except ImportError:
-        alkosto_results = []
-    else:
-        alkosto_results = scrape_alkosto_live(corrected_query, payload.user_location, payload.filters)
 
     try:
         from vtex_scraper import scrape_vtex_catalog_live
@@ -1435,7 +1431,7 @@ def get_recommendations(payload: SearchRequest):
     all_results = (
         hiraoka_results
         + falabella_results
-        + alkosto_results
+        
         + promart_results
         + oechsle_results
         + plazavea_results
@@ -1465,12 +1461,7 @@ def compare_prices(payload: SearchRequest):
     corrected_query = correct_search_query(payload.query)
     
     # Obtener productos de todas las tiendas
-    try:
-        from alkosto_scraper import scrape_alkosto_live
-    except ImportError:
-        alkosto_results = []
-    else:
-        alkosto_results = scrape_alkosto_live(corrected_query, payload.user_location, payload.filters)
+    
 
     try:
         from vtex_scraper import scrape_vtex_catalog_live
@@ -1516,7 +1507,7 @@ def compare_prices(payload: SearchRequest):
     all_results = (
         hiraoka_results
         + falabella_results
-        + alkosto_results
+        
         + promart_results
         + oechsle_results
         + plazavea_results
@@ -1561,12 +1552,7 @@ def get_statistics(payload: SearchRequest):
     corrected_query = correct_search_query(payload.query)
     
     # Obtener productos
-    try:
-        from alkosto_scraper import scrape_alkosto_live
-    except ImportError:
-        alkosto_results = []
-    else:
-        alkosto_results = scrape_alkosto_live(corrected_query, payload.user_location, payload.filters)
+    
 
     try:
         from vtex_scraper import scrape_vtex_catalog_live
@@ -1612,7 +1598,7 @@ def get_statistics(payload: SearchRequest):
     all_results = (
         hiraoka_results
         + falabella_results
-        + alkosto_results
+        
         + promart_results
         + oechsle_results
         + plazavea_results
