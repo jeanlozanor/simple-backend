@@ -1,18 +1,20 @@
-import time
+import json
 from decimal import Decimal
 from typing import List, Optional
-from urllib.parse import urljoin
 
 import requests
-from bs4 import BeautifulSoup
 
 from main import normalize_text, haversine_km, Location, ProductResult, SearchFilters
 
-# Endpoint de búsqueda de Inkafarma
-BASE_SEARCH_URL = "https://inkafarma.pe/buscador"
+# API de Algolia para Inkafarma
+ALGOLIA_APP_ID = "15W622LAQ4"
+ALGOLIA_API_KEY = "eb3261874e9b933efab019b04acff834"
+ALGOLIA_INDEX = "products"
+ALGOLIA_URL = f"https://{ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/{ALGOLIA_INDEX}/query"
 
 INKAFARMA_LAT = -12.06
 INKAFARMA_LON = -77.04
+IMAGE_BASE_URL = "https://dcuk1cxrnzjkh.cloudfront.net/imagesproducto/"
 
 
 def scrape_inkafarma_live(
@@ -21,52 +23,45 @@ def scrape_inkafarma_live(
     filters: Optional[SearchFilters] = None,
 ) -> List[ProductResult]:
     """
-    Scraper en vivo para Inkafarma (Perú).
-    Inkafarma es un sitio de farmacias con búsqueda de productos.
+    Scraper en vivo para Inkafarma (Perú) usando API de Algolia.
     """
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/120.0 Safari/537.36"
-        )
+        "Content-Type": "application/json",
+        "X-Algolia-Application-Id": ALGOLIA_APP_ID,
+        "X-Algolia-API-Key": ALGOLIA_API_KEY,
     }
 
-    params = {"keyword": query}
+    body = {
+        "query": query,
+        "hitsPerPage": 50,
+    }
 
     try:
-        resp = requests.get(BASE_SEARCH_URL, params=params, headers=headers, timeout=20)
+        resp = requests.post(ALGOLIA_URL, json=body, headers=headers, timeout=20)
         resp.raise_for_status()
+        data = resp.json()
     except Exception as e:
-        print(f"Error al conectar con Inkafarma: {e}")
+        print(f"Error al conectar con Inkafarma (Algolia): {e}")
         return []
 
-    soup = BeautifulSoup(resp.text, "html.parser")
-
-    # Inkafarma usa fp-link como contenedor de productos
-    product_cards = soup.select("fp-link")
+    hits = data.get("hits", [])
 
     results: List[ProductResult] = []
 
-    for idx, card in enumerate(product_cards, start=1):
+    for idx, hit in enumerate(hits, start=1):
         try:
             # ========= NOMBRE =========
-            # Buscar en fp-product-name > span.product-name
-            name_el = card.select_one("fp-product-name span.product-name, span.product-name")
-            if not name_el:
-                continue
-            name = name_el.get_text(strip=True)
+            name = hit.get("name", "")
             if not name or len(name) < 3:
                 continue
 
-            # ========= DESCRIPCIÓN/PRESENTACIÓN (opcional) =========
-            desc_el = card.select_one("fp-product-description span.search-small, span.search-small")
-            description = desc_el.get_text(strip=True) if desc_el else None
-            if description:
-                name = f"{name} {description}"
+            # ========= PRESENTACIÓN (agregar al nombre) =========
+            presentation = hit.get("presentation", "")
+            if presentation:
+                name = f"{name} - {presentation}"
 
-            # ========= MARCA (extraída de tags si existe) =========
-            brand = None
+            # ========= MARCA =========
+            brand = hit.get("brand", None)
 
             # ========= FILTRO ESTRICTO POR PALABRAS =====
             full_name = f"{name} {brand or ''}"
@@ -79,50 +74,26 @@ def scrape_inkafarma_live(
                 continue
 
             # ========= PRECIO =========
-            # Buscar precio con monedero/descuento primero (dentro de span.card-monedero)
-            price_monedero = card.select_one("span.card-monedero span")
-            if price_monedero:
-                price_text = price_monedero.get_text(strip=True)
-            else:
-                # Si no hay precio con monedero, buscar precio normal
-                price_el = card.select_one("fp-product-price p.label--2")
-                if not price_el:
-                    continue
-                price_text = price_el.get_text(strip=True)
-            
-            # Limpiar: "S/ 34.00" -> "34.00"
-            digits = (
-                price_text.replace("S/", "")
-                .replace("S/.", "")
-                .replace("s/", "")
-                .replace("\xa0", " ")
-                .replace(" ", "")
-                .replace(",", "")
-            )
+            # Usar precio con promoción si existe, sino precio normal
+            price_promo = hit.get("pricePromo", 0)
+            price_list = hit.get("priceList", 0)
+            price = price_promo if price_promo and price_promo > 0 else price_list
 
-            try:
-                price = float(Decimal(digits))
-            except Exception:
+            if not price or price <= 0:
                 continue
 
-            if price <= 0:
-                continue
+            price = float(price)
 
             # ========= IMAGEN =========
-            img_el = card.select_one("fp-product-image img, fp-image img")
-            image_url = None
-            if img_el:
-                src = img_el.get("src") or img_el.get("data-src") or img_el.get("srcset")
-                if src:
-                    # Si tiene srcset, tomar la primera URL
-                    if " " in src:
-                        src = src.split()[0]
-                    image_url = src.strip()
+            image_url = hit.get("image", None)
+            if not image_url:
+                object_id = hit.get("objectID", "")
+                if object_id:
+                    image_url = f"{IMAGE_BASE_URL}{object_id}X.jpg"
 
             # ========= URL DEL PRODUCTO =========
-            link_el = card.select_one("a[href]")
-            href = link_el.get("href") if link_el else None
-            product_url = urljoin("https://inkafarma.pe", href) if href else None
+            uri = hit.get("uri", "")
+            product_url = f"https://inkafarma.pe/producto/{uri}" if uri else None
 
             # ========= FILTROS SIMPLES =========
             if filters:
@@ -151,7 +122,7 @@ def scrape_inkafarma_live(
                     product_id=idx,
                     name=name,
                     brand=brand,
-                    category=None,
+                    category=hit.get("category", [None])[0] if hit.get("category") else None,
                     image_url=image_url,
                     product_url=product_url,
                     price=price,
@@ -167,8 +138,6 @@ def scrape_inkafarma_live(
         except Exception as e:
             print(f"Error procesando producto de Inkafarma: {e}")
             continue
-
-        time.sleep(0.03)
 
     # Ordenar resultados
     if user_location:
