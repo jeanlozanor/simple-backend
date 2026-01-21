@@ -9,7 +9,7 @@ from bs4 import BeautifulSoup
 from main import normalize_text, haversine_km, Location, ProductResult, SearchFilters
 
 # Endpoint de búsqueda de Inkafarma
-BASE_SEARCH_URL = "https://www.inkafarma.com.pe/buscar"
+BASE_SEARCH_URL = "https://inkafarma.pe/buscador"
 
 INKAFARMA_LAT = -12.06
 INKAFARMA_LON = -77.04
@@ -32,7 +32,7 @@ def scrape_inkafarma_live(
         )
     }
 
-    params = {"q": query}
+    params = {"keyword": query}
 
     try:
         resp = requests.get(BASE_SEARCH_URL, params=params, headers=headers, timeout=20)
