@@ -43,32 +43,30 @@ def scrape_inkafarma_live(
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Inkafarma típicamente usa divs de productos con clases como "product", "item", "producto"
-    # Intentamos varios selectores comunes
-    product_cards = soup.select(
-        "div[class*='product'], article[class*='product'], "
-        "div[class*='item'], li[class*='product'], "
-        "div.producto, div.item-producto"
-    )
+    # Inkafarma usa fp-link como contenedor de productos
+    product_cards = soup.select("fp-link")
 
     results: List[ProductResult] = []
 
     for idx, card in enumerate(product_cards, start=1):
         try:
             # ========= NOMBRE =========
-            name_el = card.select_one(
-                "[class*='product-name'], [class*='titulo'], "
-                ".product-name, h2, h3, .name, .titulo"
-            )
+            # Buscar en fp-product-name > span.product-name
+            name_el = card.select_one("fp-product-name span.product-name, span.product-name")
             if not name_el:
                 continue
             name = name_el.get_text(strip=True)
             if not name or len(name) < 3:
                 continue
 
-            # ========= MARCA (opcional) =========
-            brand_el = card.select_one("[class*='brand'], [class*='marca'], .brand, .marca")
-            brand = brand_el.get_text(strip=True) if brand_el else None
+            # ========= DESCRIPCIÓN/PRESENTACIÓN (opcional) =========
+            desc_el = card.select_one("fp-product-description span.search-small, span.search-small")
+            description = desc_el.get_text(strip=True) if desc_el else None
+            if description:
+                name = f"{name} {description}"
+
+            # ========= MARCA (extraída de tags si existe) =========
+            brand = None
 
             # ========= FILTRO ESTRICTO POR PALABRAS =====
             full_name = f"{name} {brand or ''}"
@@ -81,15 +79,18 @@ def scrape_inkafarma_live(
                 continue
 
             # ========= PRECIO =========
-            price_el = card.select_one(
-                "[class*='price'], [class*='precio'], .price, .precio, "
-                "[data-price], .product-price"
-            )
-            if not price_el:
-                continue
-
-            price_text = price_el.get_text(strip=True)
-            # Limpiar: "S/ 123.45" -> "123.45"
+            # Buscar precio con monedero/descuento primero (dentro de span.card-monedero)
+            price_monedero = card.select_one("span.card-monedero span")
+            if price_monedero:
+                price_text = price_monedero.get_text(strip=True)
+            else:
+                # Si no hay precio con monedero, buscar precio normal
+                price_el = card.select_one("fp-product-price p.label--2")
+                if not price_el:
+                    continue
+                price_text = price_el.get_text(strip=True)
+            
+            # Limpiar: "S/ 34.00" -> "34.00"
             digits = (
                 price_text.replace("S/", "")
                 .replace("S/.", "")
@@ -108,17 +109,20 @@ def scrape_inkafarma_live(
                 continue
 
             # ========= IMAGEN =========
-            img_el = card.select_one("img")
+            img_el = card.select_one("fp-product-image img, fp-image img")
             image_url = None
             if img_el:
-                src = img_el.get("src") or img_el.get("data-src")
+                src = img_el.get("src") or img_el.get("data-src") or img_el.get("srcset")
                 if src:
+                    # Si tiene srcset, tomar la primera URL
+                    if " " in src:
+                        src = src.split()[0]
                     image_url = src.strip()
 
             # ========= URL DEL PRODUCTO =========
             link_el = card.select_one("a[href]")
             href = link_el.get("href") if link_el else None
-            product_url = urljoin(BASE_SEARCH_URL.rsplit("/", 1)[0], href) if href else None
+            product_url = urljoin("https://inkafarma.pe", href) if href else None
 
             # ========= FILTROS SIMPLES =========
             if filters:
