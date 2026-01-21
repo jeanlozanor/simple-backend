@@ -34,7 +34,7 @@ FALABELLA_LON = -77.04
 app = FastAPI(
     title="Simple API",
     description="Backend de Simple: búsqueda de productos con IA + mapa",
-    version="0.3.0"
+    version="0.3.1"
 )
 
 
