@@ -1081,44 +1081,6 @@ def search_falabella_live_endpoint(payload: SearchRequest):
     return SearchResponse(results=results, total=len(results), message=message)
 
 
-@app.post("/search/alkosto-live", response_model=SearchResponse)
-def search_alkosto_live_endpoint(payload: SearchRequest):
-    """Búsqueda en tiempo real en Alkosto (sin usar la base), con filtro ESTRICTO."""
-    if not payload.query:
-        raise HTTPException(
-            status_code=400,
-            detail="Por ahora 'query' es obligatorio para la búsqueda en Alkosto.",
-        )
-
-    try:
-        from alkosto_scraper import scrape_alkosto_live
-    except ImportError:
-        raise HTTPException(status_code=503, detail="Scraper de Alkosto no disponible")
-
-    raw_results = scrape_alkosto_live(
-        query=payload.query,
-        user_location=payload.user_location,
-        filters=payload.filters,
-    )
-
-    norm_query = normalize_text(payload.query)
-    tokens = [t for t in norm_query.split() if len(t) > 2]
-
-    if tokens:
-        filtered_results: List[ProductResult] = []
-        for r in raw_results:
-            full_name = f"{r.name} {r.brand or ''}"
-            norm_name = normalize_text(full_name)
-            if all(tok in norm_name for tok in tokens):
-                filtered_results.append(r)
-        results = filtered_results
-    else:
-        results = raw_results
-
-    message = "OK" if results else "Sin resultados para esta búsqueda en Alkosto"
-    return SearchResponse(results=results, total=len(results), message=message)
-
-
 @app.post("/search/inkafarma-live", response_model=SearchResponse)
 def search_inkafarma_live_endpoint(payload: SearchRequest):
     """Búsqueda en tiempo real en Inkafarma (sin usar la base), con filtro ESTRICTO."""
