@@ -1119,6 +1119,44 @@ def search_inkafarma_live_endpoint(payload: SearchRequest):
     return SearchResponse(results=results, total=len(results), message=message)
 
 
+@app.post("/search/mifarma-live", response_model=SearchResponse)
+def search_mifarma_live_endpoint(payload: SearchRequest):
+    """Búsqueda en tiempo real en Mifarma (Algolia), con filtro ESTRICTO."""
+    if not payload.query:
+        raise HTTPException(
+            status_code=400,
+            detail="Por ahora 'query' es obligatorio para la búsqueda en Mifarma.",
+        )
+
+    try:
+        from mifarma_scraper import scrape_mifarma_live
+    except ImportError:
+        raise HTTPException(status_code=503, detail="Scraper de Mifarma no disponible")
+
+    raw_results = scrape_mifarma_live(
+        query=payload.query,
+        user_location=payload.user_location,
+        filters=payload.filters,
+    )
+
+    norm_query = normalize_text(payload.query)
+    tokens = [t for t in norm_query.split() if len(t) > 2]
+
+    if tokens:
+        filtered_results: List[ProductResult] = []
+        for r in raw_results:
+            full_name = f"{r.name} {r.brand or ''}"
+            norm_name = normalize_text(full_name)
+            if all(tok in norm_name for tok in tokens):
+                filtered_results.append(r)
+        results = filtered_results
+    else:
+        results = raw_results
+
+    message = "OK" if results else "Sin resultados para esta búsqueda en Mifarma"
+    return SearchResponse(results=results, total=len(results), message=message)
+
+
 @app.post("/search/promart-live", response_model=SearchResponse)
 def search_promart_live_endpoint(payload: SearchRequest):
     """Búsqueda en tiempo real en Promart (API VTEX catalog_system), con filtro ESTRICTO."""
